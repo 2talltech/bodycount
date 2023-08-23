@@ -3,7 +3,7 @@
 #   gnome-icon-theme imagemagick avahi-tools samba-client xdg-utils
 set state(title) "body count"
 set state(version) "r1"
-set state(url) "http://bodycount.app"
+set state(url) "https://github.com/2talltech/bodycount"
 # get the directory where this script resides
 set thisFile [ dict get [ info frame 0 ] file ]
 set state(dataDir) [ file dirname $thisFile ]
@@ -92,6 +92,7 @@ if {$restore} {
 			# read $creds list
 			source $credsFile
 			samba creds import $creds
+			set creds ""
 		} else {
 			puts "Cannot read credentials file."
 			set restore 0

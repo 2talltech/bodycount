@@ -373,8 +373,8 @@ proc getCredentials {} {
 	pack [ttk::frame .dlg.bf] -side bottom -expand 1 -fill x -padx 10 -pady 10
 	pack [ttk::button .dlg.bf.ok -text "Open" -command fileChooser::dlgOk] -side right 
 	pack [ttk::button .dlg.bf.cancel -text "Cancel" -command fileChooser::dlgCancel] -side left
-        bind .dlg <Return> dlgOk
-        bind .dlg <Escape> dlgCancel
+        bind .dlg <Return> fileChooser::dlgOk
+        bind .dlg <Escape> fileChooser::dlgCancel
         # Okay button
         focus .dlg.f.user
         Show.Modal .dlg -destroy 1 -onclose fileChooser::dlgCancel
@@ -455,7 +455,7 @@ proc dlgInvoke {} {
 			setCmdpath $share$path
 		}
 		set creds "" ; # samba cached it
-		set result [samba ls $share $path]
+		# set result [samba ls $share $path]
 		set entries [samba ls $share $path]
 		set dirs [lsort [dict get $entries dirs]]
 		set fls [lsort [dict get $entries files]]

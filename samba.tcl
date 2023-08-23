@@ -23,7 +23,6 @@ variable conns
 # where $args is key, value, key, value, ...
 proc creds { op {arg ""} } {
 	variable conns
-	if { ![info exists conns] } { return }
 	switch $op {
 	import {
 		if {$arg eq ""} { return }
