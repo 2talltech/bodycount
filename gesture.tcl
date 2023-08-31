@@ -1,6 +1,8 @@
 # TODO major rewrite with a namespace and possibly Windows,MacOS portability
 # Bodycount depends on external binaries:
 #   gnome-icon-theme imagemagick avahi-tools samba-client xdg-utils
+# and other tcl packages
+#   tcllib tcl-thread
 set state(title) "body count"
 set state(version) "r1"
 set state(url) "https://github.com/2talltech/bodycount"
@@ -11,6 +13,7 @@ set state(appIcon) bodycount.png
 
 package require Tcl 8.6-
 package require Tk 8.6-
+package require Thread 2.8-
 # Tcllib
 package require struct::list
 
@@ -101,7 +104,7 @@ if {$restore} {
 }
 
 # all image resources
-set state(icons) {background delay draw lborder logo menu next option order pause play previous rborder refresh save shuffle}
+set state(icons) {background delay draw lborder logo menu next option order pause play previous rborder refresh open save shuffle}
 set state(last) .mn.f.t1
 set state(delay) 30
 set state(images) 0
@@ -120,6 +123,10 @@ set state(smb) 0
 set state(sharePath) ""
 set state(smbDir) \\
 set state(query) 0
+
+# generate a temporary filename
+set chana [file tempfile state(tmpfile) gesture.png]
+close $chana
 
 # Traverse all subdirectories of 'dir' and
 # find all files that match expression 'exp' (case-insensitive). Files are
@@ -204,14 +211,15 @@ proc wipeCanvas {} {
 }
 
 proc prepareImage {width height} {
-	set file [lindex $::state(files) $::state(i)]
+	set filename [lindex $::state(files) $::state(i)]
 	# obtain a good temporary filename
-	set chana [file tempfile ::state(tmpfile) gesture.png]
+#	set chana [file tempfile ::state(tmpfile) gesture.png]
+	set chana [file tempfile outfile gesture.png]
 	set chanb [file tempfile infile gesture.png]
 	close $chana
 	close $chanb
 	if {$::state(smb)} {
-		set rc [catch { samba get $::state(share) "$file" $infile } msg]
+		set rc [catch { samba get $::state(share) "$filename" $infile } msg]
 		if {$rc} {
 			puts $msg
 			return error
@@ -219,18 +227,19 @@ proc prepareImage {width height} {
 	} else {
 		# ensure we don't accidentally alter/delete the original file
 		# (redundant, but nice) (-force because we will overwrite the temp file)
-		file copy -force $file $infile
+		file copy -force $filename $infile
 	}
-	set rc [catch { exec $::MAGICK "$infile" -auto-orient -resize ${width}x${height} $::state(tmpfile) } msg]
+#	set rc [catch { exec $::MAGICK "$infile" -auto-orient -resize ${width}x${height} $::state(tmpfile) } msg]
+	set rc [catch { exec $::MAGICK "$infile" -auto-orient -resize ${width}x${height} "$outfile" } msg]
 	# TODO log msg?
 	if {$rc} {
 		puts $msg
 	}
 	if {$::state(imgobj) != ""} { wipeCanvas }
-	set ::state(imgobj) [image create photo -file $::state(tmpfile)]
+	set ::state(imgobj) [image create photo -file $outfile]
 	# careful!
 	file delete $infile
-	file delete $::state(tmpfile)
+	file delete $outfile
 	return ok
 }
 
@@ -311,8 +320,10 @@ proc playShow {} {
 		.img create window $x 2 -anchor nw -window .img.play -tags "buttons"
 		incr x [winfo reqwidth .img.play]
 		.img create window $x 2 -anchor nw -window .img.next -tags "buttons"
-		incr x [winfo reqwidth .img.refresh]
+		incr x [winfo reqwidth .img.next]
 		.img create window $x 2 -anchor nw -window .img.refresh -tags "buttons"
+		incr x [winfo reqwidth .img.refresh]
+		.img create window $x 2 -anchor nw -window .img.open -tags "buttons"
 	}
 	focus .img.play
 	# push out some extra configure events
@@ -340,6 +351,26 @@ proc pauseBtn {} {
 proc refreshBtn {} {
 	drawCanvas
 	reset
+}
+
+# xdg-open
+proc openBtn {} {
+	set filename [lindex $::state(files) $::state(i)]
+	if {$::state(smb)} {
+		set rc [catch { samba get $::state(share) "$filename" $::state(tmpfile) } msg]
+		if {$rc} {
+			puts $msg
+			return
+        	}
+	} else {
+		# ensure we don't accidentally alter/delete the original file
+		# (redundant, but nice) (-force because we will overwrite the temp file)
+		file copy -force "$filename" $::state(tmpfile)
+	}
+	set rc [catch { thread::create [list exec xdg-open $::state(tmpfile)] } msg]
+	if {$rc} {
+		puts $msg
+	}
 }
 
 proc queryWnd { width height x y } {
@@ -539,6 +570,7 @@ ttk::button .img.prev -style kustom.TButton -image $::state(previousImg) -comman
 ttk::button .img.play -style kustom.TButton -image $::state(pauseImg) -command pauseBtn
 ttk::button .img.next -style kustom.TButton -image $::state(nextImg) -command advance
 ttk::button .img.refresh -style kustom.TButton -image $::state(refreshImg) -command refreshBtn
+ttk::button .img.open -style kustom.TButton -image $::state(openImg) -command openBtn
 
 # show the menu and set focus button
 place .mn -x {-1} -y {-1} -relheight 1.0 -height 2 -relwidth 1.0 -width 2
@@ -550,6 +582,9 @@ bind . <Destroy> { set ::Modal.Result 2 }
 # wait for the root window to close
 # DRAW SOMETHING! LET'S FUCKING GOOOOOOOO!!
 tkwait window .
+
+# cleanup tmpfile
+if { [file exists $state(tmpfile)] } { file delete $state(tmpfile) }
 
 # save state to config folder
 if { $restore } {
