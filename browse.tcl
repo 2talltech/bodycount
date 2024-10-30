@@ -72,8 +72,8 @@ proc xdgLocs {} {
 			}
 		}
 	} else {
-		if { $path eq "" } {
-			set path $env(HOME)
+		if { ! [info exists path] } {
+			set path $::env(HOME)
 		}
 		set loc(HOME) $path
 		lappend locs HOME

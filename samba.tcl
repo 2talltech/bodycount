@@ -33,6 +33,11 @@ proc creds { op {arg ""} } {
 	export {
 		return [dict get $conns]
 	}
+	cached {
+		if { [info exists conns] } {
+		return [expr [dict size $conns] > 0]
+		} else { return 0}
+	}
 	default {
 		; # TODO throw an error maybe?
 	}

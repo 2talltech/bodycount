@@ -1,8 +1,9 @@
+#!/usr/bin/wish
 # TODO major rewrite with a namespace and possibly Windows,MacOS portability
 # Bodycount depends on external binaries:
 #   gnome-icon-theme imagemagick avahi-tools samba-client xdg-utils
 # and other tcl packages
-#   tcllib tcl-thread
+#   tcllib tcl-thread tkdnd
 set state(title) "body count"
 set state(version) "r1"
 set state(url) "https://github.com/2talltech/bodycount"
@@ -78,10 +79,11 @@ if { $initialCfg } {
 	set state(shf) 1
 	# theme
 	set state(thm) {Moody Sunset}
+	set state(creds) 0
 }
 # now attempt to restore our cached samba credentials
 set credsFile [file join $cfg creds.smb]
-if {$restore} {
+if {$restore && $state(creds)} {
 	if { ![file exists $credsFile] } {
 		set rc [catch { set chan [open $credsFile w 0600] } msg]
 		if {$rc} {
@@ -104,7 +106,7 @@ if {$restore} {
 }
 
 # all image resources
-set state(icons) {background delay draw lborder logo menu next option order pause play previous rborder refresh open save shuffle}
+set state(icons) {background bnw color delay draw lborder logo menu next option order pause play previous rborder refresh open save shuffle}
 set state(last) .mn.f.t1
 set state(delay) 30
 set state(images) 0
@@ -123,6 +125,7 @@ set state(smb) 0
 set state(sharePath) ""
 set state(smbDir) \\
 set state(query) 0
+set state(grayscale) 0
 
 # generate a temporary filename
 set chana [file tempfile state(tmpfile) gesture.png]
@@ -229,8 +232,11 @@ proc prepareImage {width height} {
 		# (redundant, but nice) (-force because we will overwrite the temp file)
 		file copy -force $filename $infile
 	}
-#	set rc [catch { exec $::MAGICK "$infile" -auto-orient -resize ${width}x${height} $::state(tmpfile) } msg]
-	set rc [catch { exec $::MAGICK "$infile" -auto-orient -resize ${width}x${height} "$outfile" } msg]
+	if {$::state(grayscale)} {
+		set rc [catch { exec $::MAGICK "$infile" -colorspace Gray -auto-orient -resize ${width}x${height} "$outfile" } msg]
+	} else {
+		set rc [catch { exec $::MAGICK "$infile" -auto-orient -resize ${width}x${height} "$outfile" } msg]
+	}
 	# TODO log msg?
 	if {$rc} {
 		puts $msg
@@ -271,6 +277,11 @@ proc reset {} {
 		after cancel $::state(id)
 		after cancel $::state(tid)
 	}
+	if {!$::state(delay)} {
+		.img delete "timer"
+		.img create text 5 5 -text "Ꝏ" -anchor nw -fill white -tags "timer" -font timerFont
+		return
+	}
 	set ::state(play) 1
 	set ::state(time) $::state(delay)
 	.img delete "timer"
@@ -281,6 +292,9 @@ proc reset {} {
 }
 
 proc play {} {
+	if {!$::state(delay)} {
+		return
+	}
 	.img.play configure -image $::state(pauseImg)
 	set ::state(play) 1
 	set ::state(id) [after [expr $::state(time) * 1000] {advance}]
@@ -288,6 +302,9 @@ proc play {} {
 }
 
 proc pause {} {
+	if {!$::state(delay)} {
+		return
+	}
 	set ::state(play) 0
 	after cancel $::state(id)
 	after cancel $::state(tid)
@@ -323,6 +340,8 @@ proc playShow {} {
 		incr x [winfo reqwidth .img.next]
 		.img create window $x 2 -anchor nw -window .img.refresh -tags "buttons"
 		incr x [winfo reqwidth .img.refresh]
+		.img create window $x 2 -anchor nw -window .img.bnw -tags "buttons"
+		incr x [winfo reqwidth .img.bnw]
 		.img create window $x 2 -anchor nw -window .img.open -tags "buttons"
 	}
 	focus .img.play
@@ -351,6 +370,16 @@ proc pauseBtn {} {
 proc refreshBtn {} {
 	drawCanvas
 	reset
+}
+
+proc bnwBtn {} {
+	set ::state(grayscale) [expr !$::state(grayscale)]
+	if {$::state(grayscale)} {
+		.img.bnw configure -image $::state(colorImg)
+	} else {
+		.img.bnw configure -image $::state(bnwImg)
+	}
+	refreshBtn
 }
 
 # xdg-open
@@ -516,6 +545,8 @@ grid [ttk::button .mn.f.t4 -text "2m"  -command {togDelay .mn.f.t4 120}]
 grid [ttk::button .mn.f.t5 -text "5m"  -command {togDelay .mn.f.t5 300}]
 grid configure .mn.f.t5 -pady 1
 grid [ttk::button .mn.f.t6 -text "10m" -command {togDelay .mn.f.t6 600}]
+grid [ttk::button .mn.f.t7 -text "Ꝏ" -command {togDelay .mn.f.t7 0}]
+grid configure .mn.f.t7 -pady 1
 # TODO other time dialog
 #grid [ttk::button .f.t7 -text "other" -command otherDelay -state disabled]
 #grid configure .f.t7 -pady 1
@@ -570,6 +601,7 @@ ttk::button .img.prev -style kustom.TButton -image $::state(previousImg) -comman
 ttk::button .img.play -style kustom.TButton -image $::state(pauseImg) -command pauseBtn
 ttk::button .img.next -style kustom.TButton -image $::state(nextImg) -command advance
 ttk::button .img.refresh -style kustom.TButton -image $::state(refreshImg) -command refreshBtn
+ttk::button .img.bnw -style kustom.TButton -image $::state(bnwImg) -command bnwBtn
 ttk::button .img.open -style kustom.TButton -image $::state(openImg) -command openBtn
 
 # show the menu and set focus button
@@ -588,22 +620,25 @@ if { [file exists $state(tmpfile)] } { file delete $state(tmpfile) }
 
 # save state to config folder
 if { $restore } {
+	if { [samba creds cached] } {
+		set rc [catch { set chan [open $credsFile w 0600] } msg]
+		if {$rc} {
+			# give up
+			puts $msg
+		} else {
+			# ok
+			puts $chan "set creds \[list [samba creds export]\]"
+			close $chan
+			set state(creds) 1
+		}
+	}
 	set rc [catch { set chan [open $cfgFile w 0600] } msg]
 	if {$rc} {
 		# give up
 		puts $msg
 	} else {
 		# ok
-		puts $chan [list array set state [list maximized $state(maximized) size $state(size) folder $state(folder) shf $state(shf) thm $state(thm)]]
-		close $chan
-	}
-	set rc [catch { set chan [open $credsFile w 0600] } msg]
-	if {$rc} {
-		# give up
-		puts $msg
-	} else {
-		# ok
-		puts $chan "set creds \[list [samba creds export]\]"
+		puts $chan [list array set state [list maximized $state(maximized) size $state(size) folder $state(folder) shf $state(shf) thm $state(thm) creds $state(creds)]]
 		close $chan
 	}
 }
