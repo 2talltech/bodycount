@@ -5,7 +5,7 @@
 # and other tcl packages
 #   tcllib tcl-thread tkdnd
 set state(title) "body count"
-set state(version) "r1"
+set state(version) "r2"
 set state(url) "https://github.com/2talltech/bodycount"
 # get the directory where this script resides
 set thisFile [ dict get [ info frame 0 ] file ]
